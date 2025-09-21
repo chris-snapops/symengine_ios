@@ -1,14 +1,46 @@
 #!/bin/bash
 set -e  # stop script on error
 
-# Paths
-export GMP_VERSION="6.3.0"
+BREW_PACKAGES_UNLINK=("symengine" "gmp")
+REQUIRED_SCRIPTS=("versions.sh" "gmp_install.sh" "symengine_install.sh")
 REQUIRED_VARS=("ROOT_FOLDER" "CODESIGN_IDENTITY")
+REQUIRED_VERSIONS=("GMP_VERSION")
+
+# Unlink installed packages if homebrew is installed
+BREW_PACKAGES_UNLINKED=()
+if command -v brew >/dev/null 2>&1; then
+    for pkg in "${BREW_PACKAGES_UNLINK[@]}"; do
+        if brew list --formula | grep -q "^${pkg}\$"; then
+            brew unlink "$pkg"
+            BREW_PACKAGES_UNLINKED+=("$pkg")
+        else
+            echo "$pkg is not installed, skipping."
+        fi
+    done
+    echo "All requested packages unlinked." && echo ""
+fi
+
+
+# check for required scripts
+for SCRIPT in "${REQUIRED_SCRIPTS[@]}"; do
+    if [ ! -f "$SCRIPT" ]; then
+        echo "Error: Required script '$SCRIPT' not found."
+        echo "Make sure all scripts are present in the directory."
+        exit 1
+    elif [ ! -x "$SCRIPT" ]; then
+        echo "Error: Required script '$SCRIPT' is not executable."
+        echo "Run 'chmod +x $SCRIPT' to make it executable."
+        exit 1
+    fi
+done
+echo "All required scripts are present and executable!"
 
 
 # Load .env if it exists
 if [ -f .env ]; then
-    export $(grep -v '^#' .env | xargs)
+    set -a
+    source .env
+    set +a
 else
     echo ".env file not found!"
     exit 1
@@ -22,16 +54,26 @@ for VAR in "${REQUIRED_VARS[@]}"; do
     fi
 done
 
+REQUIRED_VERSIONS=("GMP_VERSION")
+source ./versions.sh
+for VAR in "${REQUIRED_VERSIONS[@]}"; do
+    if [ -z "${!VAR}" ]; then
+        echo "Error: $VAR is not set in versions.sh"
+        echo "See README for required versions."
+        exit 1
+    fi
+done
+echo "All required versions are present!"
+
+echo ""
 echo "Root Folder: $ROOT_FOLDER"
 echo "Codesign ID: $CODESIGN_IDENTITY"
-echo "All required environment variables are set!"
-exit 0
+echo "GMP Version: $GMP_VERSION"
+echo "All required environment variables are set!" && echo ""
 
-brew unlink symengine
-brew unlink gmp
-
-./gmp_install.sh
-./symengine_install.sh
+# execute gmp_install.sh, and then symengine_install.sh since it's dependent on gmp
+source ./gmp_install.sh
+source ./symengine_install.sh
 
 OUT_DIR="${ROOT_FOLDER}/framework"
 SYMENGINE_XCFRAMEWORK_PATH="$OUT_DIR/symengine.xcframework"
@@ -41,7 +83,6 @@ SYMENGINE_LIB_DEVICE="${ROOT_FOLDER}/symengine/install_device/lib/libsymengine.a
 SYMENGINE_LIB_SIM="${ROOT_FOLDER}/symengine/install_simulator/lib/libsymengine.a"
 GMP_LIB_DEVICE="${ROOT_FOLDER}/gmp/device_build/libgmp.a"
 GMP_LIB_SIM="${ROOT_FOLDER}/gmp/simulator_build/libgmp.a"
-
 SYMENGINE_INCLUDE="${ROOT_FOLDER}/symengine/install_device/include/symengine"
 GMP_INCLUDE="${ROOT_FOLDER}/gmp/device_build"
 
@@ -128,6 +169,15 @@ codesign --force --sign "$CODESIGN_IDENTITY" --timestamp=none "$GMP_XCFRAMEWORK_
 
 # Clean up temporary headers
 rm -rf "$TMP_HEADERS_SYMENGINE" "$TMP_HEADERS_GMP"
+
+# Relink packages that were unlinked
+if command -v brew >/dev/null 2>&1; then
+    for pkg in "${BREW_PACKAGES_UNLINKED[@]}"; do
+        echo "Relinking $pkg..."
+        brew link "$pkg"
+    done
+    echo "All previously unlinked packages relinked." && echo ""
+fi
 
 echo "XCFrameworks created at $SYMENGINE_XCFRAMEWORK_PATH"
 echo "and $GMP_XCFRAMEWORK_PATH"

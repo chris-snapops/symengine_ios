@@ -23,6 +23,13 @@ Builds a CPP Symengine .xcframework for iOS development.
     2. set Runpath Search Paths to "@executable_path/Frameworks"
 12. go ahead and build!
 
-
+##
 ### Other notes
  - Only runs on macOS.  Shouldn't be an issue since you're building for iOS lol
+ - Default versions are found in versions.sh
+
+##
+### Credit
+ - Heavily inspired by Osama Mazhar's git repo and youtube video.
+    - https://github.com/OsamaMazhar/iOS-framework-cmake
+    - https://www.youtube.com/watch?v=TdrZ7x_W-9M
